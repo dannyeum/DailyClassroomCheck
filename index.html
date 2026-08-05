@@ -178,17 +178,21 @@ const MOOD_META = {
 const MOOD_ORDER = ['happy','okay','sad','angry','tired'];
 
 const HYGIENE_ITEMS = [
-  { id: 'hair',  label: '아침 머리 감기',   icon: '🚿' },
-  { id: 'teeth', label: '양치하기',         icon: '🦷' },
-  { id: 'hands', label: '식사 전 손 씻기',  icon: '🧼' },
-  { id: 'shoes', label: '실내화 착용',      icon: '👟' },
+  { id: 'hair',      label: '아침 머리 감기',        icon: '🚿' },
+  { id: 'teeth',     label: '양치하기',              icon: '🦷' },
+  { id: 'hands',     label: '식사 전 손 씻기',       icon: '🧼' },
+  { id: 'shoes',     label: '실내화 착용',           icon: '👟' },
+  { id: 'materials', label: '준비물 확인(없으면 완료)', icon: '🎒' },
+  { id: 'desk',      label: '책상 속 정리',          icon: '🗄️' },
+  { id: 'locker',    label: '사물함 정리',           icon: '🧴' },
+  { id: 'notice',    label: '알림장 확인(없으면 완료)', icon: '📒' },
 ];
 
 const NAV_ITEMS = [
   { id: 'home',        label: '메인 대시보드', icon: '🏠' },
   { id: 'mood',        label: '기분 출석부',   icon: '😊' },
   { id: 'homework',    label: '숙제 체크',     icon: '📚' },
-  { id: 'hygiene',     label: '위생 관리',     icon: '🧼' },
+  { id: 'hygiene',     label: '생활 환경 관리',     icon: '🧹' },
   { id: 'notes',       label: '배움노트',      icon: '📝' },
   { id: 'counseling',  label: '상담 코너',     icon: '💬' },
 ];
@@ -381,7 +385,7 @@ const VIEW_META = {
   home:       { title: '오늘의 학급 현황' },
   mood:       { title: '기분 출석부' },
   homework:   { title: '숙제 체크' },
-  hygiene:    { title: '위생 관리' },
+  hygiene:    { title: '생활 환경 관리' },
   notes:      { title: '배움노트' },
   counseling: { title: '상담 코너' },
 };
@@ -470,7 +474,7 @@ async function renderHome(root) {
       ${statCard('😊', '기분 체크 완료', `${moodChecked} / ${withMood.length}`, 'fmood')}
       ${statCard('💬', '상담 필요', `${needsCounseling}명`, 'fcounsel')}
       ${statCard('📚', '오늘의 숙제', todayAssignments.length ? `${todayAssignments.length}개 등록` : '없음', 'fhomework')}
-      ${statCard('🧼', '위생 체크 완료', `${hygieneComplete} / ${withHygiene.length}`, 'fhygiene')}
+      ${statCard('🧼', '생활 환경 체크 완료', `${hygieneComplete} / ${withHygiene.length}`, 'fhygiene')}
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 md:gap-4">
       ${withMood.map(studentCard).join('')}
@@ -668,7 +672,7 @@ async function renderHomework(root) {
 }
 
 /* =========================================================================
-   위생 관리
+   생활 환경 관리
    ========================================================================= */
 async function fetchTodayHygiene(students) {
   const dateId = todayId();
@@ -686,8 +690,8 @@ async function renderHygiene(root) {
     const snap = await getDoc(doc(db, 'students', currentUser.studentId, 'hygiene', dateId));
     const items = snap.exists() ? (snap.data().items || {}) : {};
     root.innerHTML = `
-      <p class="text-center font-heading text-2xl mb-6">${currentUser.name}님, 오늘 위생 체크 다 했나요?</p>
-      <div class="grid grid-cols-2 gap-3 max-w-xl mx-auto" id="hyg-buttons"></div>`;
+      <p class="text-center font-heading text-2xl mb-6">${currentUser.name}님, 오늘 생활 환경 체크 다 했나요?</p>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto" id="hyg-buttons"></div>`;
     const wrap = document.getElementById('hyg-buttons');
     HYGIENE_ITEMS.forEach(h => {
       const checked = !!items[h.id];
@@ -707,7 +711,7 @@ async function renderHygiene(root) {
     return;
   }
 
-  // 교사: 학급 전체 위생 현황 (항목 클릭으로 대신 체크도 가능)
+  // 교사: 학급 전체 생활 환경 현황 (항목 클릭으로 대신 체크도 가능)
   const students = await fetchClassroomStudents();
   const withHygiene = await fetchTodayHygiene(students);
   root.innerHTML = `
