@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>우리반 대시보드</title>
+
+<!-- Tailwind (빌드 과정 없이 CDN으로 바로 사용) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper: '#F5F7FA',
+          ink: '#1F2937',
+          inksoft: '#64748B',
+          brand: { DEFAULT: '#2F6690', dark: '#1F4A6B', light: '#5B8DB8' },
+          fmood: '#F4A340',
+          fhomework: '#3B82F6',
+          fhygiene: '#14B8A6',
+          fnotes: '#8B5CF6',
+          fcounsel: '#F43F5E',
+        },
+        fontFamily: {
+          heading: ['Gaegu', 'sans-serif'],
+          body: ['"Noto Sans KR"', 'sans-serif'],
+        },
+        borderRadius: { card: '18px' },
+      },
+    },
+  };
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet" />
+
+<style>
+  body { font-family: 'Noto Sans KR', sans-serif; background: #F5F7FA; }
+  .font-heading { font-family: 'Gaegu', sans-serif; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+</style>
+</head>
+<body class="text-ink">
+
+  <!-- ================= 로그인 화면 ================= -->
+  <main id="login-screen" class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-sm">
+      <div class="flex flex-col items-center mb-6">
+        <div class="w-12 h-12 rounded-2xl bg-brand text-white flex items-center justify-center mb-3 text-2xl">🏫</div>
+        <h1 class="font-heading text-2xl">우리반 대시보드</h1>
+        <p class="text-sm text-inksoft" id="login-classroom-label">6학년 4반</p>
+      </div>
+
+      <div class="bg-white rounded-card shadow border border-slate-100 overflow-hidden">
+        <div class="grid grid-cols-2">
+          <button id="tab-teacher" class="py-3 text-sm font-semibold text-brand border-b-2 border-brand">선생님</button>
+          <button id="tab-student" class="py-3 text-sm font-semibold text-inksoft border-b border-slate-100">학생</button>
+        </div>
+
+        <div class="p-6">
+          <!-- 교사 로그인 -->
+          <form id="teacher-form" class="space-y-3">
+            <input id="teacher-password" type="password" required placeholder="선생님 비밀번호"
+              class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand outline-none" />
+            <button type="submit" class="w-full rounded-xl bg-brand text-white py-2.5 text-sm font-semibold hover:bg-brand-dark transition-colors">
+              로그인
+            </button>
+          </form>
+
+          <!-- 학생 로그인 -->
+          <form id="student-form" class="space-y-3 hidden">
+            <input id="student-number" type="number" required placeholder="번호 (예: 5)"
+              class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand outline-none" />
+            <input id="student-pin" type="password" inputmode="numeric" required placeholder="비밀번호 (4자리)"
+              class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand outline-none" />
+            <button type="submit" class="w-full rounded-xl bg-fmood text-white py-2.5 text-sm font-semibold hover:opacity-90 transition-opacity">
+              들어가기
+            </button>
+          </form>
+
+          <p id="login-error" class="mt-3 text-sm text-fcounsel text-center hidden"></p>
+          <p id="login-loading" class="mt-3 text-sm text-inksoft text-center hidden">연결하는 중...</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= 앱 화면 ================= -->
+  <div id="app-screen" class="hidden min-h-screen flex bg-paper">
+    <!-- 데스크톱 사이드바 -->
+    <aside class="hidden md:flex md:w-60 md:flex-col md:shrink-0 bg-white border-r border-slate-100 min-h-screen sticky top-0">
+      <div class="flex items-center gap-2 px-6 h-16 border-b border-slate-100">
+        <span class="text-xl">🏫</span>
+        <span class="font-heading text-xl text-brand-dark">우리반 대시보드</span>
+      </div>
+      <nav id="sidebar-nav" class="flex-1 px-3 py-4 space-y-1"></nav>
+      <div class="px-4 py-4 border-t border-slate-100">
+        <div class="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+          <div id="profile-avatar" class="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center font-heading text-sm">?</div>
+          <div class="flex flex-col leading-tight flex-1 min-w-0">
+            <span id="profile-name" class="text-sm font-semibold truncate">-</span>
+            <span id="profile-role" class="text-xs text-inksoft truncate">-</span>
+          </div>
+          <button id="logout-btn" title="로그아웃" class="text-inksoft hover:text-fcounsel text-sm">⏻</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="flex-1 min-w-0 pb-16 md:pb-0">
+      <!-- 헤더 -->
+      <header class="sticky top-0 z-10 flex items-center justify-between gap-4 h-16 px-4 md:px-8 bg-paper/80 backdrop-blur border-b border-slate-100">
+        <div class="min-w-0">
+          <h1 id="page-title" class="font-heading text-2xl truncate">오늘의 학급 현황</h1>
+          <p id="page-subtitle" class="text-xs text-inksoft truncate"></p>
+        </div>
+        <span id="header-date" class="hidden sm:inline text-sm text-inksoft"></span>
+      </header>
+
+      <!-- 본문 (뷰별로 내용 교체) -->
+      <main id="view-root" class="px-4 md:px-8 py-6 space-y-6"></main>
+    </div>
+
+    <!-- 모바일 하단 탭 -->
+    <nav id="mobile-tabbar" class="md:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-100"></nav>
+  </div>
+
+<script type="module">
+/* =========================================================================
+   Firebase 초기화
+   ========================================================================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth, signInAnonymously,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc,
+  query, where, orderBy, serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ▼▼▼ 여기에 Firebase Console > 프로젝트 설정 > 일반 > 내 앱 에서 복사한 값을 그대로 붙여넣으세요 ▼▼▼
+const firebaseConfig = {
+  apiKey: "여기에_API_KEY",
+  authDomain: "여기에_PROJECT_ID.firebaseapp.com",
+  projectId: "여기에_PROJECT_ID",
+  storageBucket: "여기에_PROJECT_ID.appspot.com",
+  messagingSenderId: "여기에_SENDER_ID",
+  appId: "여기에_APP_ID",
+};
+// ▲▲▲ 여기까지 ▲▲▲
+
+// ▼ 반 정보 / 교사 비밀번호도 여기서 바로 바꿀 수 있습니다 ▼
+const CLASSROOM_ID = "6-4";
+const TEACHER_PASSWORD = "teacher1234"; // 선생님 로그인 비밀번호 - 원하는 값으로 바꾸세요
+const STUDENT_COUNT = 26;
+const STUDENT_DEFAULT_PIN = "1234";
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const AVATAR_COLORS = ['bg-rose-200','bg-blue-200','bg-amber-200','bg-teal-200','bg-violet-200','bg-orange-200','bg-emerald-200','bg-pink-200','bg-sky-200','bg-lime-200','bg-fuchsia-200','bg-cyan-200'];
+const MOOD_META = {
+  happy: { emoji: '😄', label: '행복해요' },
+  okay:  { emoji: '🙂', label: '보통이에요' },
+  sad:   { emoji: '😢', label: '슬퍼요' },
+  angry: { emoji: '😠', label: '화나요' },
+  tired: { emoji: '🥱', label: '피곤해요' },
+};
+const MOOD_ORDER = ['happy','okay','sad','angry','tired'];
+
+const NAV_ITEMS = [
+  { id: 'home',        label: '메인 대시보드', icon: '🏠' },
+  { id: 'mood',        label: '기분 출석부',   icon: '😊' },
+  { id: 'homework',    label: '숙제 체크',     icon: '📚' },
+  { id: 'hygiene',     label: '위생 관리',     icon: '🧼' },
+  { id: 'notes',       label: '배움노트',      icon: '📝' },
+  { id: 'counseling',  label: '상담 코너',     icon: '💬' },
+];
+
+/* =========================================================================
+   유틸
+   ========================================================================= */
+function todayId(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function el(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+
+/* =========================================================================
+   상태
+   ========================================================================= */
+let currentUser = null; // { role: 'teacher' } | { role: 'student', studentId, name, number }
+let currentView = 'home';
+
+/* =========================================================================
+   로그인 화면 로직
+   ========================================================================= */
+const loginScreen = document.getElementById('login-screen');
+const appScreen = document.getElementById('app-screen');
+const tabTeacher = document.getElementById('tab-teacher');
+const tabStudent = document.getElementById('tab-student');
+const teacherForm = document.getElementById('teacher-form');
+const studentForm = document.getElementById('student-form');
+const loginError = document.getElementById('login-error');
+const loginLoading = document.getElementById('login-loading');
+
+document.getElementById('login-classroom-label').textContent = `${CLASSROOM_ID.replace('-', '학년 ')}반`;
+
+tabTeacher.addEventListener('click', () => {
+  tabTeacher.className = 'py-3 text-sm font-semibold text-brand border-b-2 border-brand';
+  tabStudent.className = 'py-3 text-sm font-semibold text-inksoft border-b border-slate-100';
+  teacherForm.classList.remove('hidden');
+  studentForm.classList.add('hidden');
+});
+tabStudent.addEventListener('click', () => {
+  tabStudent.className = 'py-3 text-sm font-semibold text-fmood border-b-2 border-fmood';
+  tabTeacher.className = 'py-3 text-sm font-semibold text-inksoft border-b border-slate-100';
+  studentForm.classList.remove('hidden');
+  teacherForm.classList.add('hidden');
+});
+
+function showLoginError(msg) {
+  loginError.textContent = msg;
+  loginError.classList.remove('hidden');
+}
+function clearLoginError() {
+  loginError.classList.add('hidden');
+}
+function setLoginLoading(on) {
+  loginLoading.classList.toggle('hidden', !on);
+}
+
+async function ensureAnonAuth() {
+  if (!auth.currentUser) {
+    await signInAnonymously(auth);
+  }
+}
+
+teacherForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearLoginError();
+  const pw = document.getElementById('teacher-password').value;
+  if (pw !== TEACHER_PASSWORD) {
+    showLoginError('비밀번호가 올바르지 않아요.');
+    return;
+  }
+  setLoginLoading(true);
+  try {
+    await ensureAnonAuth();
+    currentUser = { role: 'teacher' };
+    enterApp();
+  } catch (err) {
+    showLoginError('연결에 실패했어요. Firebase 설정값을 확인해주세요.');
+    console.error(err);
+  } finally {
+    setLoginLoading(false);
+  }
+});
+
+studentForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearLoginError();
+  const number = Number(document.getElementById('student-number').value);
+  const pin = document.getElementById('student-pin').value;
+  setLoginLoading(true);
+  try {
+    await ensureAnonAuth();
+    const q = query(collection(db, 'students'), where('classroomId', '==', CLASSROOM_ID), where('number', '==', number));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      showLoginError('학번 또는 비밀번호가 올바르지 않아요.');
+      return;
+    }
+    const docSnap = snap.docs[0];
+    const student = docSnap.data();
+    const pinHash = await sha256(pin);
+    if (pinHash !== student.pinHash) {
+      showLoginError('학번 또는 비밀번호가 올바르지 않아요.');
+      return;
+    }
+    currentUser = { role: 'student', studentId: docSnap.id, name: student.name, number: student.number };
+    enterApp();
+  } catch (err) {
+    showLoginError('연결에 실패했어요. Firebase 설정값을 확인해주세요.');
+    console.error(err);
+  } finally {
+    setLoginLoading(false);
+  }
+});
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  currentUser = null;
+  appScreen.classList.add('hidden');
+  loginScreen.classList.remove('hidden');
+  teacherForm.reset();
+  studentForm.reset();
+});
+
+/* =========================================================================
+   앱 진입 / 네비게이션
+   ========================================================================= */
+function enterApp() {
+  loginScreen.classList.add('hidden');
+  appScreen.classList.remove('hidden');
+
+  document.getElementById('profile-avatar').textContent = currentUser.role === 'teacher' ? '선' : currentUser.name[0];
+  document.getElementById('profile-name').textContent = currentUser.role === 'teacher' ? '선생님' : `${currentUser.name} (${currentUser.number}번)`;
+  document.getElementById('profile-role').textContent = currentUser.role === 'teacher' ? `${CLASSROOM_ID.replace('-', '학년 ')}반 · 담임` : '학생';
+  document.getElementById('header-date').textContent = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
+
+  renderNav();
+  navigateTo('home');
+}
+
+function renderNav() {
+  const sidebar = document.getElementById('sidebar-nav');
+  const tabbar = document.getElementById('mobile-tabbar');
+  sidebar.innerHTML = '';
+  tabbar.innerHTML = '';
+
+  const tabRow = el('<ul class="grid grid-cols-6"></ul>');
+
+  NAV_ITEMS.forEach(item => {
+    const link = el(`
+      <a href="#" data-view="${item.id}" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-inksoft hover:bg-slate-50 hover:text-ink transition-colors">
+        <span class="w-8 h-8 flex items-center justify-center text-lg">${item.icon}</span>${item.label}
+      </a>`);
+    link.addEventListener('click', (e) => { e.preventDefault(); navigateTo(item.id); });
+    sidebar.appendChild(link);
+
+    const tab = el(`
+      <li><a href="#" data-view="${item.id}" class="flex flex-col items-center justify-center gap-0.5 py-2">
+        <span class="text-lg">${item.icon}</span>
+        <span class="text-[10px] leading-none text-slate-400">${item.label}</span>
+      </a></li>`);
+    tab.querySelector('a').addEventListener('click', (e) => { e.preventDefault(); navigateTo(item.id); });
+    tabRow.appendChild(tab);
+  });
+  tabbar.appendChild(tabRow);
+}
+
+function setActiveNav(viewId) {
+  document.querySelectorAll('#sidebar-nav a').forEach(a => {
+    const active = a.dataset.view === viewId;
+    a.className = `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${active ? 'bg-brand/10 text-brand-dark' : 'text-inksoft hover:bg-slate-50 hover:text-ink'}`;
+  });
+  document.querySelectorAll('#mobile-tabbar a').forEach(a => {
+    const active = a.dataset.view === viewId;
+    a.querySelector('span:last-child').className = `text-[10px] leading-none ${active ? 'text-ink font-semibold' : 'text-slate-400'}`;
+  });
+}
+
+const VIEW_META = {
+  home:       { title: '오늘의 학급 현황' },
+  mood:       { title: '기분 출석부' },
+  homework:   { title: '숙제 체크' },
+  hygiene:    { title: '위생 관리' },
+  notes:      { title: '배움노트' },
+  counseling: { title: '상담 코너' },
+};
+
+async function navigateTo(viewId) {
+  currentView = viewId;
+  setActiveNav(viewId);
+  const meta = VIEW_META[viewId];
+  document.getElementById('page-title').textContent = meta.title;
+  document.getElementById('page-subtitle').textContent = currentUser.role === 'teacher' ? `${CLASSROOM_ID.replace('-', '학년 ')}반` : '';
+
+  const root = document.getElementById('view-root');
+  root.innerHTML = `<p class="text-inksoft text-sm">불러오는 중...</p>`;
+
+  if (viewId === 'home') await renderHome(root);
+  else if (viewId === 'mood') await renderMood(root);
+  else await renderComingSoon(root, meta.title);
+}
+
+function renderComingSoon(root, title) {
+  root.innerHTML = `
+    <div class="rounded-card bg-white border border-dashed border-slate-200 py-16 text-center text-inksoft">
+      "${title}" 기능은 다음 업데이트에서 추가될 예정이에요.
+    </div>`;
+}
+
+/* =========================================================================
+   메인 대시보드
+   ========================================================================= */
+async function fetchClassroomStudents() {
+  const q = query(collection(db, 'students'), where('classroomId', '==', CLASSROOM_ID), orderBy('number'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function fetchTodayMoods(students) {
+  const dateId = todayId();
+  const results = await Promise.all(students.map(async (s) => {
+    const moodSnap = await getDoc(doc(db, 'students', s.id, 'moods', dateId));
+    return { ...s, mood: moodSnap.exists() ? moodSnap.data().mood : null };
+  }));
+  return results;
+}
+
+async function renderHome(root) {
+  if (currentUser.role !== 'teacher') {
+    root.innerHTML = `<div class="rounded-card bg-white border border-slate-100 shadow p-8 text-center">
+      <p class="font-heading text-2xl mb-2">안녕하세요, ${currentUser.name}님! 👋</p>
+      <p class="text-inksoft">왼쪽(또는 아래) 메뉴에서 오늘 할 일을 선택해주세요.</p>
+    </div>`;
+    return;
+  }
+
+  const students = await fetchClassroomStudents();
+  if (students.length === 0) {
+    root.innerHTML = `
+      <div class="rounded-card bg-white border border-dashed border-slate-200 py-16 text-center text-inksoft">
+        아직 등록된 학생이 없어요.<br/>
+        <button id="seed-btn" class="mt-4 rounded-xl bg-brand text-white px-4 py-2 text-sm font-semibold hover:bg-brand-dark">
+          ${CLASSROOM_ID} 1~${STUDENT_COUNT}번 학생 자동 생성 (PIN ${STUDENT_DEFAULT_PIN})
+        </button>
+      </div>`;
+    document.getElementById('seed-btn').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = '생성 중...';
+      await seedStudents();
+      navigateTo('home');
+    });
+    return;
+  }
+
+  const withMood = await fetchTodayMoods(students);
+  const moodChecked = withMood.filter(s => s.mood).length;
+  const needsCounseling = withMood.filter(s => s.needsCounseling).length;
+
+  root.innerHTML = `
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      ${statCard('😊', '기분 체크 완료', `${moodChecked} / ${withMood.length}`, 'fmood')}
+      ${statCard('💬', '상담 필요', `${needsCounseling}명`, 'fcounsel')}
+      ${statCard('📚', '숙제 체크', '준비중', 'fhomework')}
+      ${statCard('🧼', '위생 체크', '준비중', 'fhygiene')}
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 md:gap-4">
+      ${withMood.map(studentCard).join('')}
+    </div>`;
+}
+
+function statCard(icon, label, value, colorKey) {
+  return `
+    <div class="rounded-card bg-white border border-slate-100 shadow p-4 flex items-center gap-3">
+      <span class="flex items-center justify-center w-10 h-10 rounded-xl bg-${colorKey}/10 text-lg shrink-0">${icon}</span>
+      <div class="min-w-0">
+        <p class="text-xs text-inksoft truncate">${label}</p>
+        <p class="font-heading text-xl leading-tight">${value}</p>
+      </div>
+    </div>`;
+}
+
+function studentCard(s) {
+  const meta = s.mood ? MOOD_META[s.mood] : null;
+  return `
+    <div class="rounded-card bg-white border border-slate-100 shadow overflow-hidden">
+      <div class="h-1.5 w-full ${s.mood ? 'bg-fmood' : 'bg-slate-100'}"></div>
+      <div class="p-4 flex flex-col items-center text-center relative">
+        ${s.needsCounseling ? '<span class="absolute top-3 right-3 text-fcounsel text-sm">💬</span>' : ''}
+        <div class="relative">
+          <div class="w-14 h-14 rounded-full ${s.avatarColor} flex items-center justify-center font-heading text-xl text-ink/70">${s.name[0]}</div>
+          ${meta ? `<span class="absolute -bottom-1 -right-1 text-lg leading-none">${meta.emoji}</span>` : ''}
+        </div>
+        <p class="mt-2 font-semibold text-sm truncate w-full">${s.name}</p>
+        <p class="text-xs text-inksoft">${s.number}번</p>
+      </div>
+    </div>`;
+}
+
+async function seedStudents() {
+  for (let number = 1; number <= STUDENT_COUNT; number++) {
+    const pinHash = await sha256(STUDENT_DEFAULT_PIN);
+    await addDoc(collection(db, 'students'), {
+      number,
+      name: `${number}번 학생`,
+      classroomId: CLASSROOM_ID,
+      avatarColor: AVATAR_COLORS[(number - 1) % AVATAR_COLORS.length],
+      pinHash,
+      needsCounseling: false,
+      createdAt: serverTimestamp(),
+    });
+  }
+}
+
+/* =========================================================================
+   기분 출석부
+   ========================================================================= */
+async function renderMood(root) {
+  if (currentUser.role === 'student') {
+    root.innerHTML = `
+      <div class="py-8" id="mood-picker-wrap">
+        <p class="text-center font-heading text-2xl mb-8">${currentUser.name}님, 오늘 기분이 어때요?</p>
+        <div class="grid grid-cols-3 sm:grid-cols-5 gap-3 max-w-xl mx-auto" id="mood-buttons"></div>
+      </div>`;
+    const wrap = document.getElementById('mood-buttons');
+    MOOD_ORDER.forEach(mood => {
+      const meta = MOOD_META[mood];
+      const btn = el(`
+        <button class="flex flex-col items-center gap-2 rounded-card py-6 border border-slate-100 bg-white hover:border-fmood/40 hover:scale-105 transition-all">
+          <span class="text-4xl">${meta.emoji}</span>
+          <span class="text-xs font-medium text-inksoft">${meta.label}</span>
+        </button>`);
+      btn.addEventListener('click', async () => {
+        await setDoc(doc(db, 'students', currentUser.studentId, 'moods', todayId()), { mood, checkedAt: serverTimestamp() }, { merge: true });
+        document.getElementById('mood-picker-wrap').innerHTML = `
+          <div class="flex flex-col items-center justify-center py-16 text-center">
+            <span class="text-7xl mb-4">${meta.emoji}</span>
+            <p class="font-heading text-2xl">${currentUser.name}님, 등록 완료!</p>
+            <p class="text-inksoft mt-1">오늘 기분은 "${meta.label}"이에요.</p>
+          </div>`;
+      });
+      wrap.appendChild(btn);
+    });
+    return;
+  }
+
+  // 교사: 학급 전체 기분 보드
+  const students = await fetchClassroomStudents();
+  const withMood = await fetchTodayMoods(students);
+  root.innerHTML = `
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+      ${withMood.map(s => `
+        <div class="rounded-card bg-white border border-slate-100 shadow p-4 flex flex-col items-center text-center">
+          <div class="relative">
+            <div class="w-12 h-12 rounded-full ${s.avatarColor} flex items-center justify-center font-heading text-lg text-ink/70">${s.name[0]}</div>
+            <span class="absolute -bottom-1 -right-1 text-lg leading-none">${s.mood ? MOOD_META[s.mood].emoji : '⬜'}</span>
+          </div>
+          <p class="mt-2 text-sm font-semibold truncate w-full">${s.name}</p>
+          <p class="text-xs text-inksoft">${s.mood ? MOOD_META[s.mood].label : '미체크'}</p>
+        </div>`).join('')}
+    </div>`;
+}
+</script>
+</body>
+</html>
