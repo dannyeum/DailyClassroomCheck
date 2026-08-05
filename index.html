@@ -145,8 +145,9 @@ const firebaseConfig = {
   authDomain: "dailyclasschecks.firebaseapp.com",
   projectId: "dailyclasschecks",
   storageBucket: "dailyclasschecks.firebasestorage.app",
-  messagingSenderId: "1:290041572704:web:96d186b6bbe5077182c205",
-  appId: "G-KJ0LRJNBGE",
+  messagingSenderId: "290041572704",
+  appId: "1:290041572704:web:96d186b6bbe5077182c205",
+  measurementId: "G-KJ0LRJNBGE"
 };
 // ▲▲▲ 여기까지 ▲▲▲
 
@@ -395,9 +396,10 @@ function renderComingSoon(root, title) {
    메인 대시보드
    ========================================================================= */
 async function fetchClassroomStudents() {
-  const q = query(collection(db, 'students'), where('classroomId', '==', CLASSROOM_ID), orderBy('number'));
+  // orderBy를 Firestore 쿼리에서 빼서 별도 색인(index) 생성이 필요 없도록 함 - 정렬은 브라우저에서 처리
+  const q = query(collection(db, 'students'), where('classroomId', '==', CLASSROOM_ID));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => a.number - b.number);
 }
 
 async function fetchTodayMoods(students) {
