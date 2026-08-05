@@ -111,9 +111,14 @@
     <div class="flex-1 min-w-0 pb-16 md:pb-0">
       <!-- 헤더 -->
       <header class="sticky top-0 z-10 flex items-center justify-between gap-4 h-16 px-4 md:px-8 bg-paper/80 backdrop-blur border-b border-slate-100">
-        <div class="min-w-0">
-          <h1 id="page-title" class="font-heading text-2xl truncate">오늘의 학급 현황</h1>
-          <p id="page-subtitle" class="text-xs text-inksoft truncate"></p>
+        <div class="flex items-center gap-3 min-w-0">
+          <button id="home-btn" title="홈으로" class="shrink-0 w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-lg">
+            🏠
+          </button>
+          <div class="min-w-0">
+            <h1 id="page-title" class="font-heading text-2xl truncate">오늘의 학급 현황</h1>
+            <p id="page-subtitle" class="text-xs text-inksoft truncate"></p>
+          </div>
         </div>
         <span id="header-date" class="hidden sm:inline text-sm text-inksoft"></span>
       </header>
@@ -171,6 +176,13 @@ const MOOD_META = {
   tired: { emoji: '🥱', label: '피곤해요' },
 };
 const MOOD_ORDER = ['happy','okay','sad','angry','tired'];
+
+const HYGIENE_ITEMS = [
+  { id: 'hair',  label: '아침 머리 감기',   icon: '🚿' },
+  { id: 'teeth', label: '양치하기',         icon: '🦷' },
+  { id: 'hands', label: '식사 전 손 씻기',  icon: '🧼' },
+  { id: 'shoes', label: '실내화 착용',      icon: '👟' },
+];
 
 const NAV_ITEMS = [
   { id: 'home',        label: '메인 대시보드', icon: '🏠' },
@@ -299,6 +311,10 @@ studentForm.addEventListener('submit', async (e) => {
   }
 });
 
+document.getElementById('home-btn').addEventListener('click', () => {
+  if (currentUser) navigateTo('home');
+});
+
 document.getElementById('logout-btn').addEventListener('click', () => {
   currentUser = null;
   appScreen.classList.add('hidden');
@@ -382,6 +398,10 @@ async function navigateTo(viewId) {
 
   if (viewId === 'home') await renderHome(root);
   else if (viewId === 'mood') await renderMood(root);
+  else if (viewId === 'homework') await renderHomework(root);
+  else if (viewId === 'hygiene') await renderHygiene(root);
+  else if (viewId === 'notes') await renderNotes(root);
+  else if (viewId === 'counseling') await renderCounseling(root);
   else await renderComingSoon(root, meta.title);
 }
 
@@ -441,13 +461,16 @@ async function renderHome(root) {
   const withMood = await fetchTodayMoods(students);
   const moodChecked = withMood.filter(s => s.mood).length;
   const needsCounseling = withMood.filter(s => s.needsCounseling).length;
+  const todayAssignments = await fetchTodayAssignments();
+  const withHygiene = await fetchTodayHygiene(students);
+  const hygieneComplete = withHygiene.filter(s => s.hygieneDone === HYGIENE_ITEMS.length).length;
 
   root.innerHTML = `
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
       ${statCard('😊', '기분 체크 완료', `${moodChecked} / ${withMood.length}`, 'fmood')}
       ${statCard('💬', '상담 필요', `${needsCounseling}명`, 'fcounsel')}
-      ${statCard('📚', '숙제 체크', '준비중', 'fhomework')}
-      ${statCard('🧼', '위생 체크', '준비중', 'fhygiene')}
+      ${statCard('📚', '오늘의 숙제', todayAssignments.length ? `${todayAssignments.length}개 등록` : '없음', 'fhomework')}
+      ${statCard('🧼', '위생 체크 완료', `${hygieneComplete} / ${withHygiene.length}`, 'fhygiene')}
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 md:gap-4">
       ${withMood.map(studentCard).join('')}
@@ -544,6 +567,423 @@ async function renderMood(root) {
           <p class="text-xs text-inksoft">${s.mood ? MOOD_META[s.mood].label : '미체크'}</p>
         </div>`).join('')}
     </div>`;
+}
+
+/* =========================================================================
+   숙제 체크
+   ========================================================================= */
+async function fetchTodayAssignments() {
+  const q = query(collection(db, 'assignments'), where('classroomId', '==', CLASSROOM_ID), where('date', '==', todayId()));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+async function renderHomework(root) {
+  const assignments = await fetchTodayAssignments();
+
+  if (currentUser.role === 'student') {
+    if (assignments.length === 0) {
+      root.innerHTML = `<div class="rounded-card bg-white border border-dashed border-slate-200 py-16 text-center text-inksoft">오늘 등록된 숙제가 없어요.</div>`;
+      return;
+    }
+    const subs = await Promise.all(assignments.map(async (a) => {
+      const snap = await getDoc(doc(db, 'students', currentUser.studentId, 'homework', a.id));
+      return { ...a, done: snap.exists() ? !!snap.data().done : false };
+    }));
+    root.innerHTML = `<div class="space-y-3 max-w-xl">${subs.map(a => `
+      <button data-id="${a.id}" data-done="${a.done}" class="hw-toggle w-full flex items-center gap-3 rounded-card bg-white border ${a.done ? 'border-fhomework' : 'border-slate-100'} shadow p-4 text-left transition-colors">
+        <span class="w-6 h-6 shrink-0 rounded-full border-2 ${a.done ? 'bg-fhomework border-fhomework text-white' : 'border-slate-300'} flex items-center justify-center text-xs">${a.done ? '✓' : ''}</span>
+        <span class="flex-1 min-w-0">
+          <span class="block text-xs text-fhomework font-semibold">${a.subject}</span>
+          <span class="block text-sm ${a.done ? 'line-through text-inksoft' : ''}">${a.title}</span>
+        </span>
+      </button>`).join('')}</div>`;
+    root.querySelectorAll('.hw-toggle').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const done = btn.dataset.done !== 'true';
+        await setDoc(doc(db, 'students', currentUser.studentId, 'homework', id), { done, submittedAt: serverTimestamp() }, { merge: true });
+        renderHomework(root);
+      });
+    });
+    return;
+  }
+
+  // 교사: 과제 등록 + 학생별 제출 현황
+  const students = await fetchClassroomStudents();
+  root.innerHTML = `
+    <form id="hw-form" class="rounded-card bg-white border border-slate-100 shadow p-4 flex flex-col sm:flex-row gap-2">
+      <input id="hw-subject" required placeholder="과목 (예: 수학)" class="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-fhomework outline-none" />
+      <input id="hw-title" required placeholder="숙제 내용" class="flex-[2] rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-fhomework outline-none" />
+      <button type="submit" class="rounded-xl bg-fhomework text-white px-4 py-2 text-sm font-semibold hover:opacity-90">오늘 숙제로 등록</button>
+    </form>
+    <div id="hw-list" class="space-y-4 mt-4"></div>`;
+
+  document.getElementById('hw-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const subject = document.getElementById('hw-subject').value.trim();
+    const title = document.getElementById('hw-title').value.trim();
+    if (!subject || !title) return;
+    await addDoc(collection(db, 'assignments'), { classroomId: CLASSROOM_ID, date: todayId(), subject, title, createdAt: serverTimestamp() });
+    renderHomework(root);
+  });
+
+  const listEl = document.getElementById('hw-list');
+  if (assignments.length === 0) {
+    listEl.innerHTML = `<p class="text-sm text-inksoft text-center py-8">오늘 등록된 숙제가 아직 없어요.</p>`;
+    return;
+  }
+
+  for (const a of assignments) {
+    const subs = await Promise.all(students.map(async (s) => {
+      const snap = await getDoc(doc(db, 'students', s.id, 'homework', a.id));
+      return { ...s, done: snap.exists() ? !!snap.data().done : false };
+    }));
+    const doneCount = subs.filter(s => s.done).length;
+    const card = el(`
+      <div class="rounded-card bg-white border border-slate-100 shadow p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <span class="text-xs font-semibold text-fhomework">${a.subject}</span>
+            <p class="text-sm font-medium">${a.title}</p>
+          </div>
+          <span class="text-xs text-inksoft shrink-0">${doneCount} / ${subs.length} 제출</span>
+        </div>
+        <div class="flex flex-wrap gap-2"></div>
+      </div>`);
+    const wrap = card.querySelector('.flex-wrap');
+    subs.forEach(s => {
+      const chip = el(`
+        <button title="${s.name}" class="w-9 h-9 rounded-full ${s.avatarColor} flex items-center justify-center font-heading text-xs relative ${s.done ? 'ring-2 ring-fhomework' : 'opacity-40'}">
+          ${s.name[0]}
+        </button>`);
+      chip.addEventListener('click', async () => {
+        await setDoc(doc(db, 'students', s.id, 'homework', a.id), { done: !s.done, submittedAt: serverTimestamp() }, { merge: true });
+        renderHomework(root);
+      });
+      wrap.appendChild(chip);
+    });
+    listEl.appendChild(card);
+  }
+}
+
+/* =========================================================================
+   위생 관리
+   ========================================================================= */
+async function fetchTodayHygiene(students) {
+  const dateId = todayId();
+  return Promise.all(students.map(async (s) => {
+    const snap = await getDoc(doc(db, 'students', s.id, 'hygiene', dateId));
+    const items = snap.exists() ? (snap.data().items || {}) : {};
+    return { ...s, hygieneItems: items, hygieneDone: HYGIENE_ITEMS.filter(h => items[h.id]).length };
+  }));
+}
+
+async function renderHygiene(root) {
+  const dateId = todayId();
+
+  if (currentUser.role === 'student') {
+    const snap = await getDoc(doc(db, 'students', currentUser.studentId, 'hygiene', dateId));
+    const items = snap.exists() ? (snap.data().items || {}) : {};
+    root.innerHTML = `
+      <p class="text-center font-heading text-2xl mb-6">${currentUser.name}님, 오늘 위생 체크 다 했나요?</p>
+      <div class="grid grid-cols-2 gap-3 max-w-xl mx-auto" id="hyg-buttons"></div>`;
+    const wrap = document.getElementById('hyg-buttons');
+    HYGIENE_ITEMS.forEach(h => {
+      const checked = !!items[h.id];
+      const btn = el(`
+        <button data-id="${h.id}" class="flex flex-col items-center gap-2 rounded-card py-6 border transition-all ${checked ? 'border-fhygiene bg-fhygiene/10' : 'border-slate-100 bg-white hover:border-fhygiene/40'}">
+          <span class="text-3xl">${h.icon}</span>
+          <span class="text-xs font-medium text-inksoft">${h.label}</span>
+          <span class="text-lg">${checked ? '✅' : '⬜'}</span>
+        </button>`);
+      btn.addEventListener('click', async () => {
+        const next = { ...items, [h.id]: !items[h.id] };
+        await setDoc(doc(db, 'students', currentUser.studentId, 'hygiene', dateId), { items: next, studentCheckedAt: serverTimestamp() }, { merge: true });
+        renderHygiene(root);
+      });
+      wrap.appendChild(btn);
+    });
+    return;
+  }
+
+  // 교사: 학급 전체 위생 현황 (항목 클릭으로 대신 체크도 가능)
+  const students = await fetchClassroomStudents();
+  const withHygiene = await fetchTodayHygiene(students);
+  root.innerHTML = `
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      ${withHygiene.map(s => `
+        <div class="rounded-card bg-white border border-slate-100 shadow p-4">
+          <div class="flex items-center gap-2 mb-3">
+            <div class="w-9 h-9 rounded-full ${s.avatarColor} flex items-center justify-center font-heading text-sm">${s.name[0]}</div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-semibold truncate">${s.name}</p>
+              <p class="text-xs text-inksoft">${s.hygieneDone} / ${HYGIENE_ITEMS.length} 완료</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-4 gap-1.5">
+            ${HYGIENE_ITEMS.map(h => `
+              <button data-student="${s.id}" data-item="${h.id}" class="hyg-item-toggle rounded-lg py-2 text-lg ${s.hygieneItems[h.id] ? 'bg-fhygiene/15' : 'bg-slate-50 opacity-40'}" title="${h.label}">
+                ${h.icon}
+              </button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
+  root.querySelectorAll('.hyg-item-toggle').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const sid = btn.dataset.student;
+      const itemId = btn.dataset.item;
+      const snap = await getDoc(doc(db, 'students', sid, 'hygiene', dateId));
+      const items = snap.exists() ? (snap.data().items || {}) : {};
+      await setDoc(doc(db, 'students', sid, 'hygiene', dateId), { items: { ...items, [itemId]: !items[itemId] }, teacherConfirmedAt: serverTimestamp() }, { merge: true });
+      renderHygiene(root);
+    });
+  });
+}
+
+/* =========================================================================
+   배움노트
+   ========================================================================= */
+async function fetchTodaySubjects() {
+  const snap = await getDoc(doc(db, 'classroomDaily', `${CLASSROOM_ID}_${todayId()}`));
+  return snap.exists() ? (snap.data().subjects || []) : [];
+}
+
+async function renderNotes(root) {
+  const dateId = todayId();
+  const subjects = await fetchTodaySubjects();
+
+  if (currentUser.role === 'student') {
+    if (subjects.length === 0) {
+      root.innerHTML = `<div class="rounded-card bg-white border border-dashed border-slate-200 py-16 text-center text-inksoft">오늘 등록된 과목이 아직 없어요. 선생님이 곧 등록해주실 거예요.</div>`;
+      return;
+    }
+    const notes = await Promise.all(subjects.map(async (subject, idx) => {
+      const snap = await getDoc(doc(db, 'students', currentUser.studentId, 'learningNotes', `${dateId}_${idx}`));
+      return snap.exists() ? snap.data() : { content: '', teacherComment: '', stamp: '' };
+    }));
+    root.innerHTML = `<div class="space-y-4 max-w-2xl">${subjects.map((subject, idx) => `
+      <div class="rounded-card bg-white border border-slate-100 shadow p-4">
+        <p class="text-xs font-semibold text-fnotes mb-2">${subject}</p>
+        <textarea data-idx="${idx}" rows="3" placeholder="오늘 배운 내용을 적어보세요" class="note-textarea w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-fnotes outline-none resize-none">${notes[idx].content || ''}</textarea>
+        <div class="flex items-center justify-between mt-2">
+          <button data-idx="${idx}" class="note-save rounded-lg bg-fnotes text-white text-xs px-3 py-1.5 font-semibold hover:opacity-90">저장</button>
+          ${notes[idx].stamp ? `<span class="text-xs text-fnotes">🏅 ${notes[idx].stamp}</span>` : ''}
+        </div>
+        ${notes[idx].teacherComment ? `<p class="mt-2 text-xs text-inksoft bg-slate-50 rounded-lg px-3 py-2">👩‍🏫 ${notes[idx].teacherComment}</p>` : ''}
+      </div>`).join('')}</div>`;
+
+    root.querySelectorAll('.note-save').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const idx = btn.dataset.idx;
+        const content = root.querySelector(`.note-textarea[data-idx="${idx}"]`).value;
+        await setDoc(doc(db, 'students', currentUser.studentId, 'learningNotes', `${dateId}_${idx}`), {
+          date: dateId, subject: subjects[idx], content, createdAt: serverTimestamp(),
+        }, { merge: true });
+        btn.textContent = '저장됨 ✓';
+        setTimeout(() => { btn.textContent = '저장'; }, 1500);
+      });
+    });
+    return;
+  }
+
+  // 교사: 오늘의 과목 등록 + 학생 배움노트 타임라인
+  root.innerHTML = `
+    <div class="rounded-card bg-white border border-slate-100 shadow p-4">
+      <p class="text-xs font-semibold text-fnotes mb-2">오늘의 과목</p>
+      <div class="flex flex-wrap gap-2 mb-3" id="subject-chips">
+        ${subjects.map((s, i) => `<span class="inline-flex items-center gap-1 rounded-full bg-fnotes/10 text-fnotes text-xs font-medium px-3 py-1">${s}<button data-idx="${i}" class="remove-subject hover:text-fcounsel">×</button></span>`).join('') || '<span class="text-xs text-inksoft">아직 등록된 과목이 없어요.</span>'}
+      </div>
+      <form id="subject-form" class="flex gap-2">
+        <input id="subject-input" placeholder="과목 추가 (예: 국어)" class="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-fnotes outline-none" />
+        <button type="submit" class="rounded-xl bg-fnotes text-white px-4 py-2 text-sm font-semibold hover:opacity-90">추가</button>
+      </form>
+    </div>
+    <div id="notes-timeline" class="space-y-3 mt-4"></div>`;
+
+  document.getElementById('subject-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('subject-input');
+    const value = input.value.trim();
+    if (!value) return;
+    await setDoc(doc(db, 'classroomDaily', `${CLASSROOM_ID}_${dateId}`), { subjects: [...subjects, value] }, { merge: true });
+    renderNotes(root);
+  });
+  root.querySelectorAll('.remove-subject').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const idx = Number(btn.dataset.idx);
+      const next = subjects.filter((_, i) => i !== idx);
+      await setDoc(doc(db, 'classroomDaily', `${CLASSROOM_ID}_${dateId}`), { subjects: next }, { merge: true });
+      renderNotes(root);
+    });
+  });
+
+  const timeline = document.getElementById('notes-timeline');
+  if (subjects.length === 0) {
+    timeline.innerHTML = `<p class="text-sm text-inksoft text-center py-8">과목을 등록하면 학생들의 배움노트가 여기에 모여요.</p>`;
+    return;
+  }
+
+  const students = await fetchClassroomStudents();
+  const entries = [];
+  for (const s of students) {
+    for (let idx = 0; idx < subjects.length; idx++) {
+      const snap = await getDoc(doc(db, 'students', s.id, 'learningNotes', `${dateId}_${idx}`));
+      if (snap.exists() && snap.data().content) {
+        entries.push({ studentId: s.id, studentName: s.name, avatarColor: s.avatarColor, subject: subjects[idx], ...snap.data() });
+      }
+    }
+  }
+
+  if (entries.length === 0) {
+    timeline.innerHTML = `<p class="text-sm text-inksoft text-center py-8">아직 작성된 배움노트가 없어요.</p>`;
+    return;
+  }
+
+  entries.forEach(entry => {
+    const card = el(`
+      <div class="rounded-card bg-white border border-slate-100 shadow p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-8 h-8 rounded-full ${entry.avatarColor} flex items-center justify-center font-heading text-xs">${entry.studentName[0]}</div>
+          <p class="text-sm font-semibold">${entry.studentName}</p>
+          <span class="text-xs text-fnotes bg-fnotes/10 rounded-full px-2 py-0.5">${entry.subject}</span>
+        </div>
+        <p class="text-sm text-ink mb-2">${entry.content}</p>
+        ${entry.teacherComment ? `<p class="text-xs text-inksoft bg-slate-50 rounded-lg px-3 py-2 mb-2">👩‍🏫 ${entry.teacherComment}</p>` : ''}
+        <div class="flex items-center gap-2">
+          <input placeholder="댓글 남기기" class="comment-input flex-1 rounded-lg border border-slate-200 px-2 py-1 text-xs focus:border-fnotes outline-none" />
+          <button class="comment-save rounded-lg bg-fnotes text-white text-xs px-2 py-1">댓글</button>
+          <select class="stamp-select rounded-lg border border-slate-200 px-1 py-1 text-xs">
+            <option value="">도장</option>
+            <option value="참잘했어요" ${entry.stamp === '참잘했어요' ? 'selected' : ''}>참잘했어요</option>
+            <option value="최고예요" ${entry.stamp === '최고예요' ? 'selected' : ''}>최고예요</option>
+            <option value="노력해봐요" ${entry.stamp === '노력해봐요' ? 'selected' : ''}>노력해봐요</option>
+          </select>
+        </div>
+      </div>`);
+    const noteRef = doc(db, 'students', entry.studentId, 'learningNotes', `${entry.date}_${subjects.indexOf(entry.subject)}`);
+    card.querySelector('.comment-save').addEventListener('click', async () => {
+      const val = card.querySelector('.comment-input').value.trim();
+      if (!val) return;
+      await setDoc(noteRef, { teacherComment: val }, { merge: true });
+      renderNotes(root);
+    });
+    card.querySelector('.stamp-select').addEventListener('change', async (e) => {
+      await setDoc(noteRef, { stamp: e.target.value }, { merge: true });
+      renderNotes(root);
+    });
+    timeline.appendChild(card);
+  });
+}
+
+/* =========================================================================
+   상담 코너
+   ========================================================================= */
+function formatCounselDate(ts) {
+  if (!ts || !ts.toDate) return '';
+  return new Intl.DateTimeFormat('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ts.toDate());
+}
+
+function renderCounselThreadHTML(entries) {
+  if (entries.length === 0) {
+    return `<p class="text-sm text-inksoft text-center py-8">아직 상담 기록이 없어요. 편하게 이야기를 남겨보세요.</p>`;
+  }
+  return entries.map(e => `
+    <div class="flex ${e.author === 'teacher' ? 'justify-end' : 'justify-start'}">
+      <div class="max-w-[80%] rounded-card px-4 py-2.5 ${e.author === 'teacher' ? 'bg-brand text-white' : 'bg-white border border-slate-100'}">
+        <p class="text-sm whitespace-pre-wrap">${e.content}</p>
+        <p class="text-[10px] mt-1 ${e.author === 'teacher' ? 'text-white/70' : 'text-inksoft'}">${e.authorName} · ${formatCounselDate(e.createdAt)}</p>
+      </div>
+    </div>`).join('');
+}
+
+async function fetchCounselThread(studentId) {
+  const snap = await getDocs(collection(db, 'students', studentId, 'counseling'));
+  return snap.docs.map(d => d.data()).sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
+}
+
+async function renderCounseling(root) {
+  if (currentUser.role === 'student') {
+    root.innerHTML = `
+      <div class="max-w-xl mx-auto">
+        <p class="text-sm text-inksoft mb-3">이곳에 남긴 이야기는 선생님만 볼 수 있어요.</p>
+        <div id="thread" class="space-y-2 mb-4"></div>
+        <form id="counsel-form" class="flex gap-2">
+          <input id="counsel-input" placeholder="선생님께 하고 싶은 이야기를 적어보세요" class="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-fcounsel outline-none" />
+          <button type="submit" class="rounded-xl bg-fcounsel text-white px-4 py-2 text-sm font-semibold hover:opacity-90">보내기</button>
+        </form>
+      </div>`;
+    const threadEl = document.getElementById('thread');
+    threadEl.innerHTML = renderCounselThreadHTML(await fetchCounselThread(currentUser.studentId));
+    document.getElementById('counsel-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('counsel-input');
+      const value = input.value.trim();
+      if (!value) return;
+      await addDoc(collection(db, 'students', currentUser.studentId, 'counseling'), {
+        content: value, author: 'student', authorName: currentUser.name, createdAt: serverTimestamp(),
+      });
+      input.value = '';
+      threadEl.innerHTML = renderCounselThreadHTML(await fetchCounselThread(currentUser.studentId));
+    });
+    return;
+  }
+
+  // 교사: 학생 목록 + 선택한 학생과의 상담 스레드
+  const students = await fetchClassroomStudents();
+  root.innerHTML = `
+    <div class="flex flex-col md:flex-row gap-4">
+      <div class="md:w-56 shrink-0 rounded-card bg-white border border-slate-100 shadow p-2 max-h-[420px] overflow-y-auto" id="counsel-student-list"></div>
+      <div class="flex-1 rounded-card bg-white border border-slate-100 shadow p-4 flex flex-col" id="counsel-detail">
+        <p class="text-sm text-inksoft text-center py-8">왼쪽에서 학생을 선택해주세요.</p>
+      </div>
+    </div>`;
+
+  const listEl = document.getElementById('counsel-student-list');
+  const detailEl = document.getElementById('counsel-detail');
+
+  students.forEach(s => {
+    const item = el(`
+      <button class="counsel-student-item w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-slate-50 text-left">
+        <div class="w-7 h-7 rounded-full ${s.avatarColor} flex items-center justify-center font-heading text-xs shrink-0">${s.name[0]}</div>
+        <span class="flex-1 truncate">${s.name}</span>
+        ${s.needsCounseling ? '<span class="text-fcounsel text-xs">💬</span>' : ''}
+      </button>`);
+    item.addEventListener('click', () => loadCounselDetail(s));
+    listEl.appendChild(item);
+  });
+
+  async function loadCounselDetail(s) {
+    detailEl.innerHTML = `
+      <div class="flex items-center justify-between mb-3 pb-3 border-b border-slate-100">
+        <p class="font-semibold text-sm">${s.name} (${s.number}번)</p>
+        <label class="flex items-center gap-1.5 text-xs text-inksoft">
+          <input type="checkbox" id="needs-counsel-check" ${s.needsCounseling ? 'checked' : ''} /> 상담 필요 표시
+        </label>
+      </div>
+      <div id="counsel-thread" class="space-y-2 flex-1 overflow-y-auto max-h-64 mb-3"></div>
+      <form id="counsel-reply-form" class="flex gap-2">
+        <input id="counsel-reply-input" placeholder="답글 남기기" class="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-brand outline-none" />
+        <button type="submit" class="rounded-xl bg-brand text-white px-4 py-2 text-sm font-semibold hover:bg-brand-dark">보내기</button>
+      </form>`;
+
+    document.getElementById('counsel-thread').innerHTML = renderCounselThreadHTML(await fetchCounselThread(s.id));
+    document.getElementById('needs-counsel-check').addEventListener('change', async (e) => {
+      await setDoc(doc(db, 'students', s.id), { needsCounseling: e.target.checked }, { merge: true });
+      s.needsCounseling = e.target.checked;
+    });
+    document.getElementById('counsel-reply-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('counsel-reply-input');
+      const value = input.value.trim();
+      if (!value) return;
+      await addDoc(collection(db, 'students', s.id, 'counseling'), {
+        content: value, author: 'teacher', authorName: '선생님', createdAt: serverTimestamp(),
+      });
+      input.value = '';
+      document.getElementById('counsel-thread').innerHTML = renderCounselThreadHTML(await fetchCounselThread(s.id));
+    });
+  }
 }
 </script>
 </body>
